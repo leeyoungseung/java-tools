@@ -1,0 +1,16 @@
+plugins {
+    id 'java'
+}
+sourceCompatibility = '11'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13'
+    
+    // For tools/Calculator.java
+	implementation group: 'org.graalvm.js', name: 'js', version: '21.1.0'
+	implementation group: 'org.graalvm.js', name: 'js-scriptengine', version: '21.1.0'
+}
