@@ -2,15 +2,38 @@ plugins {
     id 'java'
 }
 sourceCompatibility = '11'
+compileJava.options.encoding='UTF-8'
+
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
+	implementation fileTree(dir: 'libs', include: ['*.jar'])
     testImplementation 'junit:junit:4.13'
     
     // For tools/Calculator.java
 	implementation group: 'org.graalvm.js', name: 'js', version: '21.1.0'
 	implementation group: 'org.graalvm.js', name: 'js-scriptengine', version: '21.1.0'
+	
+}
+
+version = '1.0.0'
+task BuildJar(type: Jar) {
+    archiveName = 'calculator.jar'
+    manifest {
+        attributes 'Main-Class': 'tools.Calculator' 
+        attributes 'Class-Path': configurations.runtime.files.collect { "lib/%it.name" }.join(' ')
+    }
+    from {
+  	    configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+         }
+            {
+                exclude "META-INF/*.SF"
+                exclude "META-INF/*.DSA"
+                exclude "META-INF/*.RSA"
+            }
+    with jar
 }
