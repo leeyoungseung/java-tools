@@ -26,7 +26,17 @@ dependencies {
     implementation group: 'commons-dbcp', name: 'commons-dbcp', version: '1.4'
 	implementation group: 'mysql', name: 'mysql-connector-java', version: '5.1.6'
     implementation group: 'com.oracle.database.jdbc', name: 'ojdbc6', version: '11.2.0.4'
-	
+    
+    // For load check tool
+    implementation 'org.apache.poi:poi-ooxml:4.1.1'
+    
+    // For Apache poi
+    // https://mvnrepository.com/artifact/org.apache.poi/poi
+    implementation group: 'org.apache.poi', name: 'poi', version: '5.0.0'
+	implementation group: 'org.apache.poi', name: 'poi-ooxml', version: '5.0.0'
+	implementation group: 'org.apache.poi', name: 'poi-scratchpad', version: '5.0.0'
+	implementation group: 'org.apache.poi', name: 'poi-excelant', version: '5.0.0'
+	implementation group: 'org.apache.poi', name: 'poi-examples', version: '5.0.0'
 }
 
 version = '1.0.0'
