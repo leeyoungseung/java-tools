@@ -101,6 +101,7 @@ public class Calculator {
 			// 종료, 계산로그의 저장여부 확인
 			if (inputStr.equals("exit")) {
 				System.out.println("To terminate Calculator");
+				sc.close();
 				break;
 			
 			} else if (inputStr.equals("save")) {

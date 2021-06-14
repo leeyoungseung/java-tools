@@ -42,10 +42,14 @@ public class ItemDataOutputTool {
 	 * @return
 	 * @throws IOException
 	 */
-	public boolean outputDataToolExecute(String outputType) throws IOException{
+	public boolean outputDataToolExecute(String outputType) throws IOException, NullPointerException{
 		// (1) 출력 타입별로 다른 인스턴스를 생성한다.
 		//ItemDataOutputFactory factory = new ItemDataOutputFactory();
 		ItemDataOutput job = ItemDataOutputFactory.getInstance(outputType);
+		
+		if (job == null) {
+			throw new NullPointerException();
+		}
 		
 		// (2) 추출해야하는 데이터의 전체 건수를 확인한다.
 		// (3) 'A: 데이터의 전체 건수 / B: 1회 데이터 최대 건수' 의 값만큼 아래(4~6)처리를 반복한다.
