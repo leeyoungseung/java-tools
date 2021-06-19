@@ -24,6 +24,23 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.xddf.usermodel.chart.AxisPosition;
+import org.apache.poi.xddf.usermodel.chart.ChartTypes;
+import org.apache.poi.xddf.usermodel.chart.LegendPosition;
+import org.apache.poi.xddf.usermodel.chart.MarkerStyle;
+import org.apache.poi.xddf.usermodel.chart.XDDFCategoryAxis;
+import org.apache.poi.xddf.usermodel.chart.XDDFChartLegend;
+import org.apache.poi.xddf.usermodel.chart.XDDFDataSource;
+import org.apache.poi.xddf.usermodel.chart.XDDFDataSourcesFactory;
+import org.apache.poi.xddf.usermodel.chart.XDDFDateAxis;
+import org.apache.poi.xddf.usermodel.chart.XDDFLineChartData;
+import org.apache.poi.xddf.usermodel.chart.XDDFNumericalDataSource;
+import org.apache.poi.xddf.usermodel.chart.XDDFValueAxis;
+import org.apache.poi.xssf.usermodel.XSSFChart;
+import org.apache.poi.xssf.usermodel.XSSFClientAnchor;
+import org.apache.poi.xssf.usermodel.XSSFDrawing;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 public class VmstatVisualizationJob implements LoadVisualizationJob {
 
@@ -99,6 +116,20 @@ public class VmstatVisualizationJob implements LoadVisualizationJob {
 				}
 			}
 		}
+		
+		int su = 1;
+		for (String [] line : fileValues) {
+			StringBuilder sb = new StringBuilder();
+			
+			for (String str : line) {
+				sb.append(str);
+				sb.append(",");
+			}
+			System.out.println("["+su+"] "+sb.toString());
+			sb = null;
+			su++;
+		}
+		
 
 		return fileValues;
 	}
@@ -109,13 +140,13 @@ public class VmstatVisualizationJob implements LoadVisualizationJob {
 	 * @throws ParseException 
 	 */
 	public void makeDataSheet(List<String[]> fileValues) throws ParseException {
-		String version = "xls";
+		String version = "xlsx";
 
 		// Make Excel
-		Workbook workbook = createWorkbook(version);
+		XSSFWorkbook workbook = (XSSFWorkbook) createWorkbook(version);
 
 		// Make Data Sheet
-		Sheet sheet = workbook.createSheet("Data");
+		XSSFSheet sheet = workbook.createSheet("Data");
 
 		
 		// Generate First Row
@@ -192,21 +223,92 @@ public class VmstatVisualizationJob implements LoadVisualizationJob {
 		cal.setTime(date);
 
 		// Generate Data Row
-		for (int rowNum = 2; rowNum < fileValues.size(); rowNum++) {
+		int fileValueCount = fileValues.size();
+		System.out.println("fileValueCount : "+fileValueCount);
+		
+		int startNum = 2;
+		for (int rowNum = 0; rowNum < fileValueCount; rowNum++) {
 			
 			String[] line = fileValues.get(rowNum);
+			
 			// step.1 Output Datetime
 			cal.add(Calendar.SECOND, addDatetime + interval);
-			getCell(sheet, rowNum, 0).setCellValue(sdf.format(cal.getTime()));
+			getCell(sheet, startNum, 0).setCellValue(sdf.format(cal.getTime()));
 
 			
 			// step.2 Output result value.
 			for (int cellNum = 1; cellNum <= line.length; cellNum++) {
-				getCell(sheet, rowNum, cellNum).setCellValue(line[cellNum-1]);
+				getCell(sheet, startNum, cellNum).setCellValue(Double.parseDouble(line[cellNum-1]));
 			}
-
+			
+			startNum++;
 		}
 
+		
+		// Make Data Sheet
+		XSSFSheet memorySheet = workbook.createSheet("Memory");
+		
+		
+		// make LineChart
+		XSSFDrawing drawing = memorySheet.createDrawingPatriarch();
+		XSSFClientAnchor anchor = drawing.createAnchor(0, 0, 0, 0, 0, 4, 7, 26);
+		
+		
+		XSSFChart chart = drawing.createChart(anchor);
+		chart.setTitleText("Percentage of memory use");
+		chart.setTitleOverlay(false);
+		
+		XDDFChartLegend legend = chart.getOrAddLegend();
+		legend.setPosition(LegendPosition.TOP_RIGHT);
+		
+		//XDDFDateAxis bottomAxis = chart.createDateAxis(AxisPosition.BOTTOM);
+		
+		XDDFCategoryAxis bottomAxis = chart.createCategoryAxis(AxisPosition.BOTTOM);
+		bottomAxis.setTitle("Flow of time");
+		
+		XDDFValueAxis leftAxis = chart.createValueAxis(AxisPosition.LEFT);
+		leftAxis.setTitle("Memory use");
+		
+		XDDFDataSource<String> time = XDDFDataSourcesFactory.fromStringCellRange(sheet,
+				new CellRangeAddress(2, fileValues.size(), 0, 0));
+		
+		XDDFNumericalDataSource<Double> swpd = XDDFDataSourcesFactory.fromNumericCellRange(sheet,
+				new CellRangeAddress(2, fileValues.size(), 3, 3));
+		
+		XDDFNumericalDataSource<Double> free = XDDFDataSourcesFactory.fromNumericCellRange(sheet,
+				new CellRangeAddress(2, fileValues.size(), 4, 4));
+
+		XDDFNumericalDataSource<Double> buff = XDDFDataSourcesFactory.fromNumericCellRange(sheet,
+				new CellRangeAddress(2, fileValues.size(), 5, 5));
+		
+		XDDFNumericalDataSource<Double> cache = XDDFDataSourcesFactory.fromNumericCellRange(sheet,
+				new CellRangeAddress(2, fileValues.size(), 6, 6));
+
+		XDDFLineChartData data = (XDDFLineChartData) chart.createData(ChartTypes.LINE, bottomAxis, leftAxis);
+
+		
+		XDDFLineChartData.Series series1 = (XDDFLineChartData.Series) data.addSeries(time, swpd);
+		series1.setTitle("Swpd", null);
+		series1.setSmooth(false);
+		series1.setMarkerStyle(MarkerStyle.STAR);
+		
+		XDDFLineChartData.Series series2 = (XDDFLineChartData.Series) data.addSeries(time, free);
+		series2.setTitle("Free", null);
+		series2.setSmooth(true);
+		series2.setMarkerStyle(MarkerStyle.SQUARE);
+		
+		XDDFLineChartData.Series series3 = (XDDFLineChartData.Series) data.addSeries(time, buff);
+		series3.setTitle("Buff", null);
+		series3.setSmooth(true);
+		series3.setMarkerStyle(MarkerStyle.CIRCLE);
+		
+		XDDFLineChartData.Series series4 = (XDDFLineChartData.Series) data.addSeries(time, cache);
+		series4.setTitle("Cache", null);
+		series4.setSmooth(true);
+		series4.setMarkerStyle(MarkerStyle.TRIANGLE);
+		
+		chart.plot(data);
+		
 		writeExcel(workbook,
 				"C:\\Users\\leeyoungseung\\project_source\\java-tools\\files\\result_poi\\vmstat-res." + version);
 
@@ -224,7 +326,7 @@ public class VmstatVisualizationJob implements LoadVisualizationJob {
 
 			// 확장 xlsx 버젼
 		} else if ("xlsx".equals(version)) {
-			return new HSSFWorkbook();
+			return new XSSFWorkbook();
 
 		}
 
