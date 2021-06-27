@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -13,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
+import java.util.Properties;
 import java.util.regex.Pattern;
 
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
@@ -42,34 +44,64 @@ import org.apache.poi.xssf.usermodel.XSSFDrawing;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
+import tools.loadvisualization.dto.VmstatParamDTO;
+
 public class VmstatVisualizationJob implements LoadVisualizationJob {
 
+	private Properties prop = null;
 	private String command;
 	private String targetFilePath;
 	private String startDateTime;
 	private int interval = 1;
-	
+	private SimpleDateFormat sdfForm1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+	VmstatParamDTO dto; 
 	
 	public VmstatVisualizationJob() {
 	}
 
 	@Override
 	public boolean visualizationProcess(String... args) throws NullPointerException, IOException, ParseException {
-
+		
+		
 		// (1) 기동 변수의 유효성 확인
 		if (args == null || args.length == 0 || !validationParam(args)) {
 			System.out.println("Paramaters Error");
 			return false;
 		}
 		
+		// 전역변수 설정
+		setProperties();
+		dto = new VmstatParamDTO(this.prop);
 		
 		// (2) vmstat결과값 파일을 읽어오기 
 		List<String[]> fileValues = getDataFromTargetFile(args[1]);
 		
+		
+		// Make Excel 
+		String version = "xlsx";
+		XSSFWorkbook workbook = (XSSFWorkbook) createWorkbook(version);
+		
 		// (3) (2)의 프로세스에서 읽어온 값을 바탕으로 Data시트 생성하기
-		makeDataSheet(fileValues);
+		Sheet dataSheet = makeDataSheet(workbook, fileValues);
+		
+		// (4) Memory Chart 생성
+		makeChartSheet(workbook, dataSheet, fileValues.size());
+		
+		writeExcel(workbook,
+		"C:\\Users\\leeyoungseung\\project_source\\java-tools\\files\\result_poi\\vmstat-res." + version);
 		
 		return true;
+	}
+	
+	private void setProperties() {
+		this.prop = new Properties();
+		InputStream is = null;
+		try {
+			is = VmstatVisualizationJob.class.getClassLoader().getResourceAsStream("config.vmstat.properties");
+			prop.load(is);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
 	}
 
 	/**
@@ -139,150 +171,108 @@ public class VmstatVisualizationJob implements LoadVisualizationJob {
 	 * @param fileValues : Values for make Data sheet.
 	 * @throws ParseException 
 	 */
-	public void makeDataSheet(List<String[]> fileValues) throws ParseException {
-		String version = "xlsx";
-
-		// Make Excel
-		XSSFWorkbook workbook = (XSSFWorkbook) createWorkbook(version);
+	public Sheet makeDataSheet(Workbook excelWorkbook, List<String[]> fileValues) throws ParseException {
+		XSSFWorkbook workbook = (XSSFWorkbook) excelWorkbook;
 
 		// Make Data Sheet
 		XSSFSheet sheet = workbook.createSheet("Data");
 
-		
 		// Generate First Row
 		// procs,-----------memory----------,---swap--,-----io----,-system--,------cpu-----
-		
-		sheet.addMergedRegion(new CellRangeAddress(0,1,0,0));
-		sheet.addMergedRegion(new CellRangeAddress(0,0,1,2));
-		sheet.addMergedRegion(new CellRangeAddress(0,0,3,6));
-		sheet.addMergedRegion(new CellRangeAddress(0,0,7,8));
-		sheet.addMergedRegion(new CellRangeAddress(0,0,9,10));
-		sheet.addMergedRegion(new CellRangeAddress(0,0,11,12));
-		sheet.addMergedRegion(new CellRangeAddress(0,0,13,17));
+		List<int[]> listDataFormat00Location = dto.getDataFormat00Location();
+		for (int[] address : listDataFormat00Location) {
+			sheet.addMergedRegion(new CellRangeAddress(address[0], address[1], address[2], address[3]));
+		}
 		
 		CellStyle headerStyle = workbook.createCellStyle();
 		headerStyle.setFillBackgroundColor(IndexedColors.BLACK.getIndex());
-		
 		headerStyle.setAlignment(HorizontalAlignment.CENTER);
-		Cell cell = getCell(sheet, 0, 0);
-		cell.setCellValue("time: (yyyy-MM-dd HH:mm:ss)");
-		cell.setCellStyle(headerStyle);
 		
-		cell = getCell(sheet, 0, 1);
-		cell.setCellValue("procs");
-		cell.setCellStyle(headerStyle);
+		Cell cell = null;
+		List<String> listDataFormat00Val = dto.getDataFormat00Value();
+		List<int[]> listDataFormat00ValLocation = dto.getDataFormat00ValueLocation();
 		
-		cell = getCell(sheet, 0, 3);
-		cell.setCellValue("memory");
-		cell.setCellStyle(headerStyle);
-		
-		cell = getCell(sheet, 0, 7);
-		cell.setCellValue("swap");
-		cell.setCellStyle(headerStyle);
-		
-		cell = getCell(sheet, 0, 9);
-		cell.setCellValue("io");
-		cell.setCellStyle(headerStyle);
-		
-		cell = getCell(sheet, 0, 11);
-		cell.setCellValue("system");
-		cell.setCellStyle(headerStyle);
-		
-		cell = getCell(sheet, 0, 13);
-		cell.setCellValue("cpu");
-		cell.setCellStyle(headerStyle);
+		for (int i = 0; i < listDataFormat00Val.size(); i++) {
+			cell = getCell(sheet, listDataFormat00ValLocation.get(i)[0], listDataFormat00ValLocation.get(i)[1]);
+			cell.setCellValue(listDataFormat00Val.get(i));
+			cell.setCellStyle(headerStyle);
+		}
 		
 		// Generate Second Row
 		// r,b,swpd,free,buff,cache,si,so,bi,bo,in,cs,us,sy,id,wa,st
-		getCell(sheet, 1, 1).setCellValue("r");
-		getCell(sheet, 1, 2).setCellValue("b");
-		getCell(sheet, 1, 3).setCellValue("swpd");
-		getCell(sheet, 1, 4).setCellValue("free");
-		getCell(sheet, 1, 5).setCellValue("buff");
-		getCell(sheet, 1, 6).setCellValue("cache");
-		getCell(sheet, 1, 7).setCellValue("si");
-		getCell(sheet, 1, 8).setCellValue("so");
-		getCell(sheet, 1, 9).setCellValue("bi");
-		getCell(sheet, 1, 10).setCellValue("bo");
-		getCell(sheet, 1, 11).setCellValue("in");
-		getCell(sheet, 1, 12).setCellValue("cs");
-		getCell(sheet, 1, 13).setCellValue("us");
-		getCell(sheet, 1, 14).setCellValue("sy");
-		getCell(sheet, 1, 15).setCellValue("id");
-		getCell(sheet, 1, 16).setCellValue("wa");
-		getCell(sheet, 1, 17).setCellValue("st");
+		List<String> listDataFormat01Val = dto.getDataFormat01Value();
+		List<int[]> listDataFormat01ValLocation = dto.getDataFormat01Location();
+		
+		for (int i = 0; i < listDataFormat01Val.size(); i++) {
+			getCell(sheet, listDataFormat01ValLocation.get(i)[0], listDataFormat01ValLocation.get(i)[1])
+			  .setCellValue(listDataFormat01Val.get(i));
+		}
 		
 		
+		// Generate Data Row
 		int addDatetime = 0;
-		
-		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-
-			
-		Date date = sdf.parse(startDateTime);
+		Date date = sdfForm1.parse(startDateTime);
 		Calendar cal = Calendar.getInstance();
 		cal.setTime(date);
-
-		// Generate Data Row
 		int fileValueCount = fileValues.size();
-		System.out.println("fileValueCount : "+fileValueCount);
+		int startNumOfResultValueDatas = 2; // Because 'result value datas' are going to input from the second row.
 		
-		int startNum = 2;
 		for (int rowNum = 0; rowNum < fileValueCount; rowNum++) {
-			
 			String[] line = fileValues.get(rowNum);
 			
 			// step.1 Output Datetime
 			cal.add(Calendar.SECOND, addDatetime + interval);
-			getCell(sheet, startNum, 0).setCellValue(sdf.format(cal.getTime()));
+			getCell(sheet, startNumOfResultValueDatas, 0).setCellValue(sdfForm1.format(cal.getTime()));
 
-			
 			// step.2 Output result value.
 			for (int cellNum = 1; cellNum <= line.length; cellNum++) {
-				getCell(sheet, startNum, cellNum).setCellValue(Double.parseDouble(line[cellNum-1]));
+				getCell(sheet, startNumOfResultValueDatas, cellNum).setCellValue(Double.parseDouble(line[cellNum-1]));
 			}
-			
-			startNum++;
+			startNumOfResultValueDatas++;
 		}
-
+		
+        return sheet;
+	}
+	
+	
+	public void makeChartSheet(Workbook excelWorkbook, Sheet dataSheet, int dataLength) {
+		XSSFWorkbook workbook = (XSSFWorkbook) excelWorkbook;
+		XSSFSheet sheet = (XSSFSheet) dataSheet;
 		
 		// Make Data Sheet
-		XSSFSheet memorySheet = workbook.createSheet("Memory");
-		
+		XSSFSheet memorySheet = workbook.createSheet(dto.getMemorySheetName());
 		
 		// make LineChart
 		XSSFDrawing drawing = memorySheet.createDrawingPatriarch();
-		XSSFClientAnchor anchor = drawing.createAnchor(0, 0, 0, 0, 0, 4, 7, 26);
-		
+		XSSFClientAnchor anchor = drawing.createAnchor(0, 0, 0, 0, 0, 0, dataLength, dataLength);
 		
 		XSSFChart chart = drawing.createChart(anchor);
-		chart.setTitleText("Percentage of memory use");
+		chart.setTitleText(dto.getMemoryChartTitle());
 		chart.setTitleOverlay(false);
 		
 		XDDFChartLegend legend = chart.getOrAddLegend();
 		legend.setPosition(LegendPosition.TOP_RIGHT);
-		
-		//XDDFDateAxis bottomAxis = chart.createDateAxis(AxisPosition.BOTTOM);
-		
+
 		XDDFCategoryAxis bottomAxis = chart.createCategoryAxis(AxisPosition.BOTTOM);
-		bottomAxis.setTitle("Flow of time");
+		bottomAxis.setTitle(dto.getMemoryChartCategoryAxisTitle());
 		
 		XDDFValueAxis leftAxis = chart.createValueAxis(AxisPosition.LEFT);
-		leftAxis.setTitle("Memory use");
+		leftAxis.setTitle(dto.getMemoryChartValueAxisTitle());
 		
 		XDDFDataSource<String> time = XDDFDataSourcesFactory.fromStringCellRange(sheet,
-				new CellRangeAddress(2, fileValues.size(), 0, 0));
+				new CellRangeAddress(2, dataLength, 0, 0));
 		
 		XDDFNumericalDataSource<Double> swpd = XDDFDataSourcesFactory.fromNumericCellRange(sheet,
-				new CellRangeAddress(2, fileValues.size(), 3, 3));
+				new CellRangeAddress(2, dataLength, 3, 3));
 		
 		XDDFNumericalDataSource<Double> free = XDDFDataSourcesFactory.fromNumericCellRange(sheet,
-				new CellRangeAddress(2, fileValues.size(), 4, 4));
+				new CellRangeAddress(2, dataLength, 4, 4));
 
 		XDDFNumericalDataSource<Double> buff = XDDFDataSourcesFactory.fromNumericCellRange(sheet,
-				new CellRangeAddress(2, fileValues.size(), 5, 5));
+				new CellRangeAddress(2, dataLength, 5, 5));
 		
 		XDDFNumericalDataSource<Double> cache = XDDFDataSourcesFactory.fromNumericCellRange(sheet,
-				new CellRangeAddress(2, fileValues.size(), 6, 6));
+				new CellRangeAddress(2, dataLength, 6, 6));
 
 		XDDFLineChartData data = (XDDFLineChartData) chart.createData(ChartTypes.LINE, bottomAxis, leftAxis);
 
@@ -308,11 +298,9 @@ public class VmstatVisualizationJob implements LoadVisualizationJob {
 		series4.setMarkerStyle(MarkerStyle.TRIANGLE);
 		
 		chart.plot(data);
-		
-		writeExcel(workbook,
-				"C:\\Users\\leeyoungseung\\project_source\\java-tools\\files\\result_poi\\vmstat-res." + version);
-
 	}
+	
+	
 
 	/**
 	 * 
