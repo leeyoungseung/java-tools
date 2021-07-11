@@ -44,24 +44,26 @@ import org.apache.poi.xssf.usermodel.XSSFDrawing;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
-import tools.loadvisualization.dto.VmstatParamDTO;
+import tools.loadvisualization.context.ContextVmstatAMI;
+import tools.loadvisualization.data.ChartData;
+import tools.loadvisualization.data.ChartData.Builder;
+import tools.loadvisualization.exception.LoadVisualizationRuntimeException;
 
 public class VmstatVisualizationJob implements LoadVisualizationJob {
-
+	
 	private Properties prop = null;
 	private String command;
 	private String targetFilePath;
 	private String startDateTime;
 	private int interval = 1;
 	private SimpleDateFormat sdfForm1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-	VmstatParamDTO dto; 
+	private SimpleDateFormat sdfForm2 = new SimpleDateFormat("yyyyMMddHHmmss");
 	
 	public VmstatVisualizationJob() {
 	}
 
 	@Override
 	public boolean visualizationProcess(String... args) throws NullPointerException, IOException, ParseException {
-		
 		
 		// (1) 기동 변수의 유효성 확인
 		if (args == null || args.length == 0 || !validationParam(args)) {
@@ -71,25 +73,50 @@ public class VmstatVisualizationJob implements LoadVisualizationJob {
 		
 		// 전역변수 설정
 		setProperties();
-		dto = new VmstatParamDTO(this.prop);
+		
 		
 		// (2) vmstat결과값 파일을 읽어오기 
 		List<String[]> fileValues = getDataFromTargetFile(args[1]);
 		
 		
 		// Make Excel 
-		String version = "xlsx";
+		String version = prop.getProperty("excel.version.type");
 		XSSFWorkbook workbook = (XSSFWorkbook) createWorkbook(version);
 		
 		// (3) (2)의 프로세스에서 읽어온 값을 바탕으로 Data시트 생성하기
 		Sheet dataSheet = makeDataSheet(workbook, fileValues);
 		
-		// (4) Memory Chart 생성
-		makeChartSheet(workbook, dataSheet, fileValues.size());
+		// (4) Chart 생성
+		ChartData chartData = new ChartData
+				.Builder(prop.getProperty("memory.sheetname"),
+						prop.getProperty("memory.chart.title"))
+				.chartLegendPosition(prop.getProperty("memory.chart.legend.position"))
+				.categoryAxisPosition(prop.getProperty("memory.chart.categoryaxis.position"))
+				.categoryAxisTitle(prop.getProperty("memory.chart.categoryaxis.title"))
+				.valueAxisPosition(prop.getProperty("memory.chart.valueaxis.position"))
+				.valueAxisTitle(prop.getProperty("memory.chart.valueaxis.title"))
+				.chartDataType(ContextVmstatAMI.M_CHART_DATA_TYPE)
+		        .chartDataRange(ContextVmstatAMI.M_CHART_DATA_RANGE)
+		        .chartDataTitle(ContextVmstatAMI.M_CHART_DATA_TITLE)
+		        .chartDataMarker(ContextVmstatAMI.M_CHART_DATA_MARKER)
+				.chartType(prop.getProperty("memory.chart.type"))
+				.build();
 		
-		writeExcel(workbook,
-		"C:\\Users\\leeyoungseung\\project_source\\java-tools\\files\\result_poi\\vmstat-res." + version);
+		try {
+			makeChartLineChartSheet(workbook, dataSheet, fileValues.size(), chartData);
+			
+		} catch (LoadVisualizationRuntimeException e) {
+			e.printStackTrace();
+		}
 		
+		
+		// (5) 결과 엑셀파일 생성
+		String now = sdfForm2.format(new Date());
+		String resultDir = prop.getProperty("result.dir");
+		String resultFileName = prop.getProperty("result.filename");
+		String resultPath = resultDir + resultFileName + "_" + now + "." + version;
+		
+		writeExcel(workbook, resultPath);
 		return true;
 	}
 	
@@ -99,24 +126,31 @@ public class VmstatVisualizationJob implements LoadVisualizationJob {
 		try {
 			is = VmstatVisualizationJob.class.getClassLoader().getResourceAsStream("config.vmstat.properties");
 			prop.load(is);
+			//vmstatContext = new ContextVmstatAMI();
+			
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
+		
 	}
 
 	/**
-	 * args[0] : commad 
-	 * args[1] : FilePath
-	 * args[2] : Start Datetime
-	 * args[3] : Interval of repeat time
+	 * args[0] : commad                   Ex) vmstat
+	 * args[1] : FilePath                 Ex) /path/to/java-tools/files/input/20210525_vmstat.txt
+	 * args[2] : Start Datetime           Ex) 2021-06-14 12:00:00
+	 * args[3] : Interval of repeat time  Ex) 1 (default value 1)
 	 */
 	@Override
 	public boolean validationParam(String... args) {
-		
 		this.command = args[0];
 		this.targetFilePath = args[1];
 		this.startDateTime = args[2];
 		this.interval = Integer.parseInt(args[3]);
+		
+		if (command == null || command.equals("")) return false; 
+		if (targetFilePath == null || targetFilePath.equals("") || ! new File(targetFilePath).exists()) return false;
+		if (startDateTime == null || startDateTime.equals("")) return false;
+		if (interval < 1) return false;
 		
 		return true;
 	}
@@ -149,25 +183,25 @@ public class VmstatVisualizationJob implements LoadVisualizationJob {
 			}
 		}
 		
-		int su = 1;
-		for (String [] line : fileValues) {
-			StringBuilder sb = new StringBuilder();
-			
-			for (String str : line) {
-				sb.append(str);
-				sb.append(",");
-			}
-			System.out.println("["+su+"] "+sb.toString());
-			sb = null;
-			su++;
-		}
+//		int su = 1;
+//		for (String [] line : fileValues) {
+//			StringBuilder sb = new StringBuilder();
+//			
+//			for (String str : line) {
+//				sb.append(str);
+//				sb.append(",");
+//			}
+//			//System.out.println("["+su+"] "+sb.toString());
+//			sb = null;
+//			su++;
+//		}
 		
 
 		return fileValues;
 	}
 
 	/**
-	 * 
+	 * Make Data Sheet for making Chart
 	 * @param fileValues : Values for make Data sheet.
 	 * @throws ParseException 
 	 */
@@ -179,9 +213,9 @@ public class VmstatVisualizationJob implements LoadVisualizationJob {
 
 		// Generate First Row
 		// procs,-----------memory----------,---swap--,-----io----,-system--,------cpu-----
-		List<int[]> listDataFormat00Location = dto.getDataFormat00Location();
-		for (int[] address : listDataFormat00Location) {
-			sheet.addMergedRegion(new CellRangeAddress(address[0], address[1], address[2], address[3]));
+		List<int[]> locations = ContextVmstatAMI.D_00_FORMAT_LOCATIONS;
+		for (int[] location : locations) {
+			sheet.addMergedRegion(new CellRangeAddress(location[0], location[1], location[2], location[3]));
 		}
 		
 		CellStyle headerStyle = workbook.createCellStyle();
@@ -189,23 +223,23 @@ public class VmstatVisualizationJob implements LoadVisualizationJob {
 		headerStyle.setAlignment(HorizontalAlignment.CENTER);
 		
 		Cell cell = null;
-		List<String> listDataFormat00Val = dto.getDataFormat00Value();
-		List<int[]> listDataFormat00ValLocation = dto.getDataFormat00ValueLocation();
+		List<String> values = ContextVmstatAMI.D_00_VALUES;
+		List<int[]> valueLocations = ContextVmstatAMI.D_00_VALUE_LOCATIONS;
 		
-		for (int i = 0; i < listDataFormat00Val.size(); i++) {
-			cell = getCell(sheet, listDataFormat00ValLocation.get(i)[0], listDataFormat00ValLocation.get(i)[1]);
-			cell.setCellValue(listDataFormat00Val.get(i));
+		for (int i = 0; i < values.size(); i++) {
+			cell = getCell(sheet, valueLocations.get(i)[0], valueLocations.get(i)[1]);
+			cell.setCellValue(values.get(i));
 			cell.setCellStyle(headerStyle);
 		}
 		
 		// Generate Second Row
 		// r,b,swpd,free,buff,cache,si,so,bi,bo,in,cs,us,sy,id,wa,st
-		List<String> listDataFormat01Val = dto.getDataFormat01Value();
-		List<int[]> listDataFormat01ValLocation = dto.getDataFormat01Location();
+		List<String> valuesSecond = ContextVmstatAMI.D_01_VALUES;
+		List<int[]> locationsSecond = ContextVmstatAMI.D_01_VALUE_LOCATIONS;
 		
-		for (int i = 0; i < listDataFormat01Val.size(); i++) {
-			getCell(sheet, listDataFormat01ValLocation.get(i)[0], listDataFormat01ValLocation.get(i)[1])
-			  .setCellValue(listDataFormat01Val.get(i));
+		for (int i = 0; i < valuesSecond.size(); i++) {
+			getCell(sheet, locationsSecond.get(i)[0], locationsSecond.get(i)[1])
+			  .setCellValue(valuesSecond.get(i));
 		}
 		
 		
@@ -234,68 +268,93 @@ public class VmstatVisualizationJob implements LoadVisualizationJob {
         return sheet;
 	}
 	
-	
-	public void makeChartSheet(Workbook excelWorkbook, Sheet dataSheet, int dataLength) {
+	/**
+	 * Make Line Chart Sheet
+	 * @param excelWorkbook
+	 * @param dataSheet
+	 * @param dataLength
+	 */
+	public void makeChartLineChartSheet(Workbook excelWorkbook, Sheet dataSheet, int dataLength, ChartData cd) throws LoadVisualizationRuntimeException {
 		XSSFWorkbook workbook = (XSSFWorkbook) excelWorkbook;
 		XSSFSheet sheet = (XSSFSheet) dataSheet;
 		
-		// Make Data Sheet
-		XSSFSheet memorySheet = workbook.createSheet(dto.getMemorySheetName());
+		// Make Chart Sheet
+		XSSFSheet memorySheet = workbook.createSheet(cd.getSheetName());
 		
-		// make LineChart
+		// Make Chart
+		// 1) 차트 그리기 시작
 		XSSFDrawing drawing = memorySheet.createDrawingPatriarch();
+		
+		// 2) 차트 크기 고정
 		XSSFClientAnchor anchor = drawing.createAnchor(0, 0, 0, 0, 0, 0, dataLength, dataLength);
 		
+		// 3) 차트 객체 생성
 		XSSFChart chart = drawing.createChart(anchor);
-		chart.setTitleText(dto.getMemoryChartTitle());
+		
+		// 4) 차트 타이틀 설정
+		chart.setTitleText(cd.getChartTitle()); 
 		chart.setTitleOverlay(false);
 		
+		// 5) 차트의 범례위치 설정
 		XDDFChartLegend legend = chart.getOrAddLegend();
-		legend.setPosition(LegendPosition.TOP_RIGHT);
+		legend.setPosition(LegendPosition.valueOf(cd.getChartLegendPosition()));
 
-		XDDFCategoryAxis bottomAxis = chart.createCategoryAxis(AxisPosition.BOTTOM);
-		bottomAxis.setTitle(dto.getMemoryChartCategoryAxisTitle());
+		// 6) 차트카테고리의 축 위치 설정 
+		XDDFCategoryAxis bottomAxis = chart.createCategoryAxis(AxisPosition.valueOf(cd.getCategoryAxisPosition()));
+		bottomAxis.setTitle(cd.getCategoryAxisTitle());
 		
-		XDDFValueAxis leftAxis = chart.createValueAxis(AxisPosition.LEFT);
-		leftAxis.setTitle(dto.getMemoryChartValueAxisTitle());
+		// 7) 차트데이터값의 축 위치 설정 
+		XDDFValueAxis leftAxis = chart.createValueAxis(AxisPosition.valueOf(cd.getValueAxisPosition()));
+		leftAxis.setTitle(cd.getValueAxisTitle());
 		
-		XDDFDataSource<String> time = XDDFDataSourcesFactory.fromStringCellRange(sheet,
-				new CellRangeAddress(2, dataLength, 0, 0));
+		// 8) 차트 표시를 위한 데이터를 설절하는 객체생성. 
+		// 생성시 차트의 종류, 차트 카테고리의 축 위치, 차트 데이터 값의 축 위치를 파라미터로 넘긴다. 
+		XDDFLineChartData data = (XDDFLineChartData) chart.createData(ChartTypes.valueOf(cd.getChartType()), bottomAxis, leftAxis);
 		
-		XDDFNumericalDataSource<Double> swpd = XDDFDataSourcesFactory.fromNumericCellRange(sheet,
-				new CellRangeAddress(2, dataLength, 3, 3));
+		// 9) 차트를 표시하기위해 데이터시트에서 가져올 데이터의 범위를 설정한다.
+		XDDFDataSource<String> time = null;                       // # 차트로 표시될 카테고리 축의 데이터 범위
+		XDDFNumericalDataSource<Double> commandResultData = null; // # 차트로 표시될 값의 축의 데이터 범위
+		List<String> chartDataTypeList = cd.getChartDataType();
+		List<int[]> chartDataRange = cd.getChartDataRange();
+		List<XDDFNumericalDataSource<Double>> dataSourceList = new ArrayList<XDDFNumericalDataSource<Double>>();
 		
-		XDDFNumericalDataSource<Double> free = XDDFDataSourcesFactory.fromNumericCellRange(sheet,
-				new CellRangeAddress(2, dataLength, 4, 4));
-
-		XDDFNumericalDataSource<Double> buff = XDDFDataSourcesFactory.fromNumericCellRange(sheet,
-				new CellRangeAddress(2, dataLength, 5, 5));
+		int cnt = 0;
+		for (String chartDataType : chartDataTypeList) {
+			// 카테고리 축에 사용되는 데이터 범위. 따라서 반드시 첫번째로 처리되어야만 한다.
+			if (chartDataType.equals("string")) { 
+				time = XDDFDataSourcesFactory.fromStringCellRange(sheet,
+						new CellRangeAddress(chartDataRange.get(cnt)[0], dataLength, chartDataRange.get(cnt)[1], chartDataRange.get(cnt)[2]));
+			
+			// 데이터값의 축에 사용되는 데이터 범위. 정상 처리를 위해서는 카테고리 축이 필요.
+			} else if (chartDataType.equals("double") && time != null) {
+				commandResultData = XDDFDataSourcesFactory.fromNumericCellRange(sheet,
+						new CellRangeAddress(chartDataRange.get(cnt)[0], dataLength, chartDataRange.get(cnt)[1], chartDataRange.get(cnt)[2]));
+				
+				XDDFLineChartData.Series series = (XDDFLineChartData.Series) data.addSeries(time, commandResultData);
+				series.setTitle(cd.getChartDataTitle().get(cnt), null);
+				series.setMarkerStyle(MarkerStyle.valueOf(cd.getChartDataMarker().get(cnt)));
+				series.setSmooth(false);
+				
+			} else {
+				throw new LoadVisualizationRuntimeException("Occur runtime error. When it set dataSource range..");
+				
+			}
+			
+			cnt++;
+		}
 		
-		XDDFNumericalDataSource<Double> cache = XDDFDataSourcesFactory.fromNumericCellRange(sheet,
-				new CellRangeAddress(2, dataLength, 6, 6));
-
-		XDDFLineChartData data = (XDDFLineChartData) chart.createData(ChartTypes.LINE, bottomAxis, leftAxis);
-
-		
-		XDDFLineChartData.Series series1 = (XDDFLineChartData.Series) data.addSeries(time, swpd);
-		series1.setTitle("Swpd", null);
-		series1.setSmooth(false);
-		series1.setMarkerStyle(MarkerStyle.STAR);
-		
-		XDDFLineChartData.Series series2 = (XDDFLineChartData.Series) data.addSeries(time, free);
-		series2.setTitle("Free", null);
-		series2.setSmooth(true);
-		series2.setMarkerStyle(MarkerStyle.SQUARE);
-		
-		XDDFLineChartData.Series series3 = (XDDFLineChartData.Series) data.addSeries(time, buff);
-		series3.setTitle("Buff", null);
-		series3.setSmooth(true);
-		series3.setMarkerStyle(MarkerStyle.CIRCLE);
-		
-		XDDFLineChartData.Series series4 = (XDDFLineChartData.Series) data.addSeries(time, cache);
-		series4.setTitle("Cache", null);
-		series4.setSmooth(true);
-		series4.setMarkerStyle(MarkerStyle.TRIANGLE);
+//		cnt = 0;
+//		for (XDDFNumericalDataSource<Double> dataSource : dataSourceList) {
+//			System.out.println("cnt ["+cnt+"]");
+//			if (cnt == 0) { cnt++; continue; }
+//			
+//			XDDFLineChartData.Series series = (XDDFLineChartData.Series) data.addSeries(time, dataSource);
+//			series.setTitle(cd.getChartDataTitle().get(cnt), null);
+//			series.setMarkerStyle(MarkerStyle.valueOf(cd.getChartDataMarker().get(cnt)));
+//			series.setSmooth(false);
+//			
+//			cnt++;
+//		}
 		
 		chart.plot(data);
 	}
