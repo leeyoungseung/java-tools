@@ -19,23 +19,23 @@ public class ContextVmstatAMI {
 	
 	// # r,b,swpd,free,buff,cache,si,so,bi,bo,in,cs,us,sy,id,wa,st
 	private static final String [] dataFormat01 = new String[] {
-			"1,1,r",
-			"1,2,b",
-			"1,3,swpd",
-			"1,4,free",
-			"1,5,buff",
-			"1,6,cache",
-			"1,7,si",
-			"1,8,so",
-			"1,9,bi",
-			"1,10,bo",
-			"1,11,in",
-			"1,12,cs",
-			"1,13,us",
-			"1,14,sy",
-			"1,15,id",
-			"1,16,wa",
-			"1,17,st"
+			"1,1,r (cpu 접근대기 프로세스 수, cpu개수보다 값이 크면 cpu자원이 포화상태이다.)",
+			"1,2,b (메모리나 I/O자원 접근대기 프로세스 수, 수치가 높으면 디스크 I/O가 지연되는 것)",
+			"1,3,swpd (사용된 스왑메모리 용량(kb))",
+			"1,4,free (사용가능한 메모리 용량(kb))",
+			"1,5,buff (버퍼로 사용된 메모리 용량(kb))",
+			"1,6,cache (캐시로 사용된 메모리 용량(kb))",
+			"1,7,si (swap-in된 메모리 용량(0이 아니라면 메모리가 부족한 것))",
+			"1,8,so (swap-out된 메모리 용량(0이 아니라면 메모리가 부족한 것))",
+			"1,9,bi (블록 디바이스에서 읽은 블록 수)",
+			"1,10,bo (블록 디바이스에서 전송한 블록 수)",
+			"1,11,in (초당 인터럽트 수)",
+			"1,12,cs (초당 컨텍스트 스위치 수)",
+			"1,13,us (user CPU: 사용자 영역에서 사용하는 CPU비율)",
+			"1,14,sy (system CPU: 시스템 콜에서 사용하는 CPU비율)",
+			"1,15,id (idle CPU: 사용가능한 CPU비율. 【100 - (us + sy) = id】 )",
+			"1,16,wa (wait I/O: I/O작업으로 인해 대기하는 CPU비율)",
+			"1,17,st (가상머신의 CPU 계산으로 대기한 CPU의 비율)"
 	};
 	
 	// # For Memory Chart
