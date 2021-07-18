@@ -63,6 +63,21 @@ public class ContextVmstatAMI {
 	public static List<String> M_CHART_DATA_TITLE = new ArrayList<String>();
 	public static List<String> M_CHART_DATA_MARKER = new ArrayList<String>();
 	
+	// # For Proc Chart
+	private static final String [] ProcChartDatas = new String[] {
+			// type,range,title,marker
+			"string,2,0,0,null,null",
+			"double,2,1,1,R,STAR",
+			"double,2,2,2,B,CIRCLE",
+	};
+	
+	// --- Memory Chart Sheet
+	public static List<String> PROC_CHART_DATA_TYPE = new ArrayList<String>();
+	public static List<int []> PROC_CHART_DATA_RANGE = new ArrayList<int[]>();
+	public static List<String> PROC_CHART_DATA_TITLE = new ArrayList<String>();
+	public static List<String> PROC_CHART_DATA_MARKER = new ArrayList<String>();
+	
+	
 	
 	static {
 		for (int i=0; i<dataFormat00.length; i++) {
@@ -132,6 +147,34 @@ public class ContextVmstatAMI {
 			M_CHART_DATA_RANGE.add(tmpRange);
 
 		}
+		
+		for (int i=0; i<ProcChartDatas.length; i++) {
+			
+			String [] tmp = ProcChartDatas[i].split(",");
+			int [] tmpRange = new int[3];
+			int tmpRangeCnt = 0;
+
+			for (int j=0; j<tmp.length; j++) {
+				if (j==0) {
+					PROC_CHART_DATA_TYPE.add(tmp[j]);
+				}
+				else if (1 <= j && j <= 3) {
+					//System.out.println("["+j+"],["+tmpRangeCnt+"] : "+tmp[j]);
+					tmpRange[tmpRangeCnt] = Integer.parseInt(tmp[j]);
+					tmpRangeCnt++;
+				}
+				else if (4==j) {
+					PROC_CHART_DATA_TITLE.add(tmp[j]);
+				}
+				else if (5==j) {
+					PROC_CHART_DATA_MARKER.add(tmp[j]);
+				}
+			}
+			
+			PROC_CHART_DATA_RANGE.add(tmpRange);
+
+		}
+		
 	}
 	
 

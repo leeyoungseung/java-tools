@@ -5,6 +5,7 @@ import java.text.ParseException;
 
 import tools.loadvisualization.LoadVisualizationJob;
 import tools.loadvisualization.LoadVisualizationJobFactory;
+import tools.loadvisualization.exception.LoadVisualizationRuntimeException;
 
 public class LoadVisualizationTool {
 	
@@ -35,9 +36,12 @@ public class LoadVisualizationTool {
 		} catch (NullPointerException e) {
 			e.printStackTrace();
 			System.exit(102);
-		} catch (Exception e) {
+		} catch (LoadVisualizationRuntimeException e) {
 			e.printStackTrace();
 			System.exit(103);
+		} catch (Exception e) {
+			e.printStackTrace();
+			System.exit(104);
 		}
 		
 		
@@ -49,7 +53,7 @@ public class LoadVisualizationTool {
 	 * @return
 	 * @throws ParseException 
 	 */
-	public boolean visualizationToolExecute(String[] args) throws IOException, NullPointerException, ParseException {
+	public boolean visualizationToolExecute(String[] args) throws IOException, NullPointerException, ParseException, LoadVisualizationRuntimeException {
 		LoadVisualizationJob job = LoadVisualizationJobFactory.getInstance(args[0]);
 		
 		if (job == null ) {

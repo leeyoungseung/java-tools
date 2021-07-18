@@ -35,6 +35,7 @@ import org.apache.poi.xddf.usermodel.chart.XDDFChartLegend;
 import org.apache.poi.xddf.usermodel.chart.XDDFDataSource;
 import org.apache.poi.xddf.usermodel.chart.XDDFDataSourcesFactory;
 import org.apache.poi.xddf.usermodel.chart.XDDFDateAxis;
+import org.apache.poi.xddf.usermodel.chart.XDDFLine3DChartData;
 import org.apache.poi.xddf.usermodel.chart.XDDFLineChartData;
 import org.apache.poi.xddf.usermodel.chart.XDDFNumericalDataSource;
 import org.apache.poi.xddf.usermodel.chart.XDDFValueAxis;
@@ -87,7 +88,7 @@ public class VmstatVisualizationJob implements LoadVisualizationJob {
 		Sheet dataSheet = makeDataSheet(workbook, fileValues);
 		
 		// (4) Chart 생성
-		ChartData chartData = new ChartData
+		ChartData chartDataMemory = new ChartData
 				.Builder(prop.getProperty("memory.sheetname"),
 						prop.getProperty("memory.chart.title"))
 				.chartLegendPosition(prop.getProperty("memory.chart.legend.position"))
@@ -102,8 +103,25 @@ public class VmstatVisualizationJob implements LoadVisualizationJob {
 				.chartType(prop.getProperty("memory.chart.type"))
 				.build();
 		
+		ChartData chartDataProc = new ChartData
+				.Builder(prop.getProperty("procs.sheetname"),
+						prop.getProperty("procs.chart.title"))
+				.chartLegendPosition(prop.getProperty("procs.chart.legend.position"))
+				.categoryAxisPosition(prop.getProperty("procs.chart.categoryaxis.position"))
+				.categoryAxisTitle(prop.getProperty("procs.chart.categoryaxis.title"))
+				.valueAxisPosition(prop.getProperty("procs.chart.valueaxis.position"))
+				.valueAxisTitle(prop.getProperty("procs.chart.valueaxis.title"))
+				.chartDataType(ContextVmstatAMI.PROC_CHART_DATA_TYPE)
+		        .chartDataRange(ContextVmstatAMI.PROC_CHART_DATA_RANGE)
+		        .chartDataTitle(ContextVmstatAMI.PROC_CHART_DATA_TITLE)
+		        .chartDataMarker(ContextVmstatAMI.PROC_CHART_DATA_MARKER)
+				.chartType(prop.getProperty("procs.chart.type"))
+				.build();
+		
+		
 		try {
-			makeChartLineChartSheet(workbook, dataSheet, fileValues.size(), chartData);
+			makeChart3DLineChartSheet(workbook, dataSheet, fileValues.size(), chartDataProc);
+			makeChartLineChartSheet(workbook, dataSheet, fileValues.size(), chartDataMemory);
 			
 		} catch (LoadVisualizationRuntimeException e) {
 			e.printStackTrace();
@@ -343,22 +361,87 @@ public class VmstatVisualizationJob implements LoadVisualizationJob {
 			cnt++;
 		}
 		
-//		cnt = 0;
-//		for (XDDFNumericalDataSource<Double> dataSource : dataSourceList) {
-//			System.out.println("cnt ["+cnt+"]");
-//			if (cnt == 0) { cnt++; continue; }
-//			
-//			XDDFLineChartData.Series series = (XDDFLineChartData.Series) data.addSeries(time, dataSource);
-//			series.setTitle(cd.getChartDataTitle().get(cnt), null);
-//			series.setMarkerStyle(MarkerStyle.valueOf(cd.getChartDataMarker().get(cnt)));
-//			series.setSmooth(false);
-//			
-//			cnt++;
-//		}
-		
 		chart.plot(data);
 	}
 	
+	
+	/**
+	 * Make 3D Line Chart Sheet
+	 * @param excelWorkbook
+	 * @param dataSheet
+	 * @param dataLength
+	 */
+	public void makeChart3DLineChartSheet(Workbook excelWorkbook, Sheet dataSheet, int dataLength, ChartData cd) throws LoadVisualizationRuntimeException {
+		XSSFWorkbook workbook = (XSSFWorkbook) excelWorkbook;
+		XSSFSheet sheet = (XSSFSheet) dataSheet;
+		
+		// Make Chart Sheet
+		XSSFSheet memorySheet = workbook.createSheet(cd.getSheetName());
+		
+		// Make Chart
+		// 1) 차트 그리기 시작
+		XSSFDrawing drawing = memorySheet.createDrawingPatriarch();
+		
+		// 2) 차트 크기 고정
+		XSSFClientAnchor anchor = drawing.createAnchor(0, 0, 0, 0, 0, 0, dataLength, dataLength);
+		
+		// 3) 차트 객체 생성
+		XSSFChart chart = drawing.createChart(anchor);
+		
+		// 4) 차트 타이틀 설정
+		chart.setTitleText(cd.getChartTitle()); 
+		chart.setTitleOverlay(false);
+		
+		// 5) 차트의 범례위치 설정
+		XDDFChartLegend legend = chart.getOrAddLegend();
+		legend.setPosition(LegendPosition.valueOf(cd.getChartLegendPosition()));
+
+		// 6) 차트카테고리의 축 위치 설정 
+		XDDFCategoryAxis bottomAxis = chart.createCategoryAxis(AxisPosition.valueOf(cd.getCategoryAxisPosition()));
+		bottomAxis.setTitle(cd.getCategoryAxisTitle());
+		
+		// 7) 차트데이터값의 축 위치 설정 
+		XDDFValueAxis leftAxis = chart.createValueAxis(AxisPosition.valueOf(cd.getValueAxisPosition()));
+		leftAxis.setTitle(cd.getValueAxisTitle());
+		
+		// 8) 차트 표시를 위한 데이터를 설절하는 객체생성. 
+		// 생성시 차트의 종류, 차트 카테고리의 축 위치, 차트 데이터 값의 축 위치를 파라미터로 넘긴다. 
+		XDDFLine3DChartData data = (XDDFLine3DChartData) chart.createData(ChartTypes.valueOf(cd.getChartType()), bottomAxis, leftAxis);
+		
+		// 9) 차트를 표시하기위해 데이터시트에서 가져올 데이터의 범위를 설정한다.
+		XDDFDataSource<String> time = null;                       // # 차트로 표시될 카테고리 축의 데이터 범위
+		XDDFNumericalDataSource<Double> commandResultData = null; // # 차트로 표시될 값의 축의 데이터 범위
+		List<String> chartDataTypeList = cd.getChartDataType();
+		List<int[]> chartDataRange = cd.getChartDataRange();
+		//List<XDDFNumericalDataSource<Double>> dataSourceList = new ArrayList<XDDFNumericalDataSource<Double>>();
+		
+		int cnt = 0;
+		for (String chartDataType : chartDataTypeList) {
+			// 카테고리 축에 사용되는 데이터 범위. 따라서 반드시 첫번째로 처리되어야만 한다.
+			if (chartDataType.equals("string")) { 
+				time = XDDFDataSourcesFactory.fromStringCellRange(sheet,
+						new CellRangeAddress(chartDataRange.get(cnt)[0], dataLength, chartDataRange.get(cnt)[1], chartDataRange.get(cnt)[2]));
+			
+			// 데이터값의 축에 사용되는 데이터 범위. 정상 처리를 위해서는 카테고리 축이 필요.
+			} else if (chartDataType.equals("double") && time != null) {
+				commandResultData = XDDFDataSourcesFactory.fromNumericCellRange(sheet,
+						new CellRangeAddress(chartDataRange.get(cnt)[0], dataLength, chartDataRange.get(cnt)[1], chartDataRange.get(cnt)[2]));
+				
+				XDDFLine3DChartData.Series series = (XDDFLine3DChartData.Series) data.addSeries(time, commandResultData);
+				series.setTitle(cd.getChartDataTitle().get(cnt), null);
+				series.setMarkerStyle(MarkerStyle.valueOf(cd.getChartDataMarker().get(cnt)));
+				series.setSmooth(false);
+				
+			} else {
+				throw new LoadVisualizationRuntimeException("Occur runtime error. When it set dataSource range..");
+				
+			}
+			
+			cnt++;
+		}
+		
+		chart.plot(data);
+	}
 	
 
 	/**
